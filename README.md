@@ -51,11 +51,14 @@ No runtime dependencies, Python 3.9+.
 
 ## Use
 
-Point it at a live server, a `tools/list` result, a JSON list, or a file of names:
+Point it at a live server (stdio or HTTP), a `tools/list` result, a JSON list, or a file of names:
 
 ```bash
 # Ask a running MCP server for its tools, before you wire it into an agent:
 $ mcp-nameguard check --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp"
+
+# Remote servers speak HTTP:
+$ mcp-nameguard check --http https://example.com/mcp --header "Authorization: Bearer …"
 
 # Or check a saved tools/list payload:
 $ mcp-nameguard check tools.json
@@ -114,10 +117,10 @@ came from; nothing is inferred. Adding a framework is a data edit in
 
 ## Scope, honestly
 
-* Talking to a server over stdio is deliberately minimal: `initialize`,
-  `notifications/initialized`, `tools/list`. It does not call any tool and does
-  not read tool output. Servers reachable only over HTTP/SSE are not supported
-  yet.
+* Talking to a server is deliberately minimal: `initialize`,
+  `notifications/initialized`, `tools/list`, over stdio or Streamable HTTP. It
+  does not call any tool and does not read tool output. Reply framing in plain
+  JSON and in SSE is accepted; the older HTTP+SSE transport is not supported.
 * It checks **name collisions only**. It does not read tool descriptions, so it
   will not catch prompt injection or tool poisoning hidden in prose — those are
   different problems with different tools.
@@ -135,10 +138,10 @@ came from; nothing is inferred. Adding a framework is a data edit in
 python -m pytest tests/
 ```
 
-28 tests covering the comparison, every payload shape, the stdio client driven
-by a stub server that banners, errors, exits, hangs and answers malformed, the
-failure mode where a bad response must not look like a clean scan, the CLI exit
-codes, and the per-name explanation.
+36 tests covering the comparison, every payload shape, both transports driven by
+stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
+malformed, the failure mode where a bad response must not look like a clean
+scan, the CLI exit codes, and the per-name explanation.
 
 ## Licence
 

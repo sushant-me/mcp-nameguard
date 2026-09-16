@@ -18,14 +18,20 @@ import subprocess
 import threading
 from typing import Any
 
-__all__ = ["McpStdioError", "list_tools_stdio", "PROTOCOL_VERSION"]
+__all__ = ["McpError", "McpStdioError", "list_tools_stdio", "PROTOCOL_VERSION"]
 
 PROTOCOL_VERSION = "2024-11-05"
-_CLIENT_INFO = {"name": "mcp-nameguard", "version": "0.2.0"}
+CLIENT_INFO = {"name": "mcp-nameguard", "version": "0.3.0"}
 
 
-class McpStdioError(RuntimeError):
-    """The server could not be asked for its tools, or answered unusably."""
+class McpError(RuntimeError):
+    """Base class: the server could not be asked for its tools, or answered
+    unusably. Every transport raises a subclass so the CLI can report a reason
+    instead of a result."""
+
+
+class McpStdioError(McpError):
+    """Failure talking to an MCP server over stdio."""
 
 
 class _Reader(threading.Thread):
@@ -141,7 +147,7 @@ def list_tools_stdio(command: str, timeout_s: float = 20.0) -> list[str]:
             "params": {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": _CLIENT_INFO,
+                "clientInfo": CLIENT_INFO,
             },
         })
         handshake = _await_id(reader, 1, timeout_s)

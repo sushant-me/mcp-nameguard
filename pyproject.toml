@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-nameguard"
-version = "0.2.0"
+version = "0.3.0"
 description = "Check an MCP server's tool names against the names agent frameworks reserve for their own tools"
 readme = "README.md"
 requires-python = ">=3.9"

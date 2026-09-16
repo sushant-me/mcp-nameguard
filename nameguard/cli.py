@@ -9,7 +9,8 @@ from typing import Sequence
 
 from . import __version__
 from . import frameworks
-from .mcp_stdio import McpStdioError, list_tools_stdio
+from .mcp_http import McpHttpError, list_tools_http
+from .mcp_stdio import McpError, McpStdioError, list_tools_stdio
 from .scan import load, scan_payload, scan_names
 
 
@@ -43,6 +44,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "start an MCP server with this command and ask it for its tools, "
             'e.g. --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp"'
         ),
+    )
+    check.add_argument(
+        "--http",
+        metavar="URL",
+        help="check a remote MCP server over Streamable HTTP",
+    )
+    check.add_argument(
+        "--header",
+        action="append",
+        metavar="'Name: value'",
+        help="extra header for --http (repeatable), e.g. --header 'Authorization: Bearer ...'",
     )
     check.add_argument(
         "--timeout",
@@ -87,10 +99,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     targets = _select(args.framework)
 
-    if args.stdio:
+    if args.stdio and args.http:
+        print("error: give either --stdio or --http, not both", file=sys.stderr)
+        return 2
+
+    if args.stdio or args.http:
+        headers: dict[str, str] = {}
+        for raw in args.header or []:
+            name, _, value = raw.partition(":")
+            if not name.strip() or not value.strip():
+                print(f"error: --header wants 'Name: value', got {raw!r}", file=sys.stderr)
+                return 2
+            headers[name.strip()] = value.strip()
+
         try:
-            names = list_tools_stdio(args.stdio, timeout_s=args.timeout)
-        except McpStdioError as exc:
+            if args.http:
+                names = list_tools_http(args.http, timeout_s=args.timeout, headers=headers)
+            else:
+                names = list_tools_stdio(args.stdio, timeout_s=args.timeout)
+        except McpError as exc:
             # A server we could not query is not a clean result.
             print(f"error: {exc}", file=sys.stderr)
             return 2
