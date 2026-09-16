@@ -1,5 +1,8 @@
 # mcp-nameguard
 
+[![CI](https://github.com/sushant-me/mcp-nameguard/actions/workflows/ci.yml/badge.svg)](https://github.com/sushant-me/mcp-nameguard/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.11%20%7C%203.13-blue)](https://github.com/sushant-me/mcp-nameguard/actions/workflows/ci.yml)
+
 Check the tool names an MCP server advertises against the names agent
 frameworks **put on the wire themselves**.
 
