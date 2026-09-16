@@ -153,7 +153,15 @@ cannot exist.
 
 Being straight about this, because a checker that cannot fail is not worth
 running. Every line below is a live `tools/list` against a real server, not a
-static reading of source:
+static reading of source, and you can reproduce the whole table:
+
+```bash
+python scripts/reality_check.py --markdown
+```
+
+Hand-picked examples cannot falsify anything — the first version of this table
+cited three servers I had chosen myself. The script exists so the set is fixed
+and checkable rather than illustrative.
 
 | server | tools | result |
 |---|---|---|
