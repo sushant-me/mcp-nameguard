@@ -115,6 +115,26 @@ Every list is transcribed from the framework's own source and cites the file it
 came from; nothing is inferred. Adding a framework is a data edit in
 `nameguard/frameworks.py`.
 
+## Has it found anything?
+
+Being straight about this, because a checker that cannot fail is not worth
+running:
+
+* The three official servers — `server-filesystem`, `server-memory`,
+  `server-everything` — advertise 14, 9 and 13 tools respectively. **None
+  collides.**
+* A sample of community servers that wrap Google Search and Google Maps name
+  their tools distinctly (`search`, `read_webpage`, `get_geocode`,
+  `search_nearby`, …) rather than after a framework-owned tool. **None
+  collides.**
+
+So treat this as **preventive**, not as a report of a known-broken situation. The
+collision it guards against is real — `google/adk-python` shipped a guard for
+exactly this and was still missing a name from it
+([#7144](https://github.com/google/adk-python/issues/7144)) — but the servers I
+have looked at so far name their tools sensibly. The check is cheap insurance at
+the moment you add a server, which is the moment nothing else checks.
+
 ## Scope, honestly
 
 * Talking to a server is deliberately minimal: `initialize`,
