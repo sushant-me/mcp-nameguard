@@ -117,16 +117,23 @@ _ADK_PYTHON = Framework(
 # google/adk-go - tool/mcptoolset/set.go
 #
 # Checked against upstream main: there is no reserved-name guard in this file,
-# or anywhere else in the repository. Every name below is therefore unguarded.
-# The names are the Go framework's own wire names; the guard that would refuse
-# them is proposed in google/adk-go#1606.
+# or anywhere else in the repository, so every name below is unguarded. The
+# guard that would refuse them is proposed in google/adk-go#1606.
+#
+# Every name here was verified as a string literal in the Go sources. An
+# earlier revision of this file copied the Java list, which was wrong in both
+# directions: Go has no `google_maps` tool (its grounded-maps tool is
+# `google_maps_grounding`, built by the factory in
+# internal/configurable/configurable_utils.go) and no `vertex_ai_search` at all.
+# Both were reported as collisions against a framework that does not use them,
+# while `google_maps_grounding` was not watched for.
 _ADK_GO = Framework(
     key="adk-go",
     name="Google ADK (Go)",
     reserved=frozenset({
         "set_model_response", "transfer_to_agent", "finish_task",
-        "task_completed", "google_search", "google_maps", "url_context",
-        "vertex_ai_search", "code_execution", "load_artifacts", "load_memory",
+        "task_completed", "google_search", "google_maps_grounding",
+        "url_context", "code_execution", "load_artifacts", "load_memory",
     }),
     guarded=frozenset(),
     source="tool/mcptoolset/set.go (no guard present upstream)",
@@ -136,17 +143,31 @@ _ADK_GO = Framework(
     ),
 )
 
-# google/adk-java - core/src/main/java/com/google/adk/tools/mcp/McpToolset.java
+# google/adk-java -
+# core/src/main/java/com/google/adk/tools/mcp/McpToolset.java
 #
 # Same finding as Go: no reserved-name guard upstream, so nothing is guarded.
 # Guard proposed in google/adk-java#1515.
+#
+# Java's tool set differs from Go's, and the two must not share a list. Every
+# name below is a `super("...")` literal in a non-test Java source, plus the two
+# the framework contributes outside a tool class: `set_model_response`
+# (added by the output-schema path) and `transfer_to_agent`.
+#
+# Two names in the previous revision were absent from Java entirely —
+# `finish_task` and `task_completed` — so they were reported as collisions
+# against a framework that does not define them.
+#
+# `LoadMemoryTool` exists but takes its name from the `loadMemory` method
+# rather than a literal, so its exact wire name was not verified and it is
+# deliberately left out rather than guessed at.
 _ADK_JAVA = Framework(
     key="adk-java",
     name="Google ADK (Java)",
     reserved=frozenset({
-        "set_model_response", "transfer_to_agent", "finish_task",
-        "task_completed", "google_search", "google_maps", "url_context",
-        "vertex_ai_search", "code_execution", "load_artifacts", "load_memory",
+        "set_model_response", "transfer_to_agent", "google_search",
+        "google_maps", "url_context", "vertex_ai_search", "code_execution",
+        "load_artifacts",
     }),
     guarded=frozenset(),
     source="core/src/main/java/com/google/adk/tools/mcp/McpToolset.java "

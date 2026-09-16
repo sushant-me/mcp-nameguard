@@ -138,7 +138,7 @@ def test_explanation_falls_back_to_the_framework_note():
 def test_unguarded_name_is_explained_as_unguarded():
     """The fallback for an unguarded name must say the framework does not refuse it."""
     adk_go = frameworks.get("adk-go")
-    text = adk_go.explain("google_maps")
+    text = adk_go.explain("google_search")
     assert "does not refuse" in text
     assert adk_go.name in text
 
@@ -198,3 +198,50 @@ def test_a_guarded_name_outside_reserved_is_rejected():
             key="broken", name="Broken", reserved=frozenset({"a"}),
             guarded=frozenset({"b"}), source="x/y.py", note="n",
         )
+
+
+# --------------------------------------------------------------------------
+# Each framework's list must come from that framework
+# --------------------------------------------------------------------------
+
+def test_the_go_and_java_lists_are_not_interchangeable():
+    """They are different codebases with different tool sets.
+
+    An earlier revision carried one list into both. That is how a name defined
+    only in one framework came to be reported as a collision against the other,
+    in both directions: a false positive for the framework that lacks it, and a
+    blind spot for the name it actually uses.
+    """
+    go = frameworks.get("adk-go").reserved
+    java = frameworks.get("adk-java").reserved
+    assert go != java
+    assert go - java, "at least one name must be Go-only"
+    assert java - go, "at least one name must be Java-only"
+
+
+def test_go_does_not_claim_names_it_does_not_define():
+    go = frameworks.get("adk-go").reserved
+    # `google_maps` is the Java tool name; Go's grounded-maps tool is built as
+    # `google_maps_grounding`. Go has no vertex_ai_search at all.
+    assert "google_maps" not in go
+    assert "vertex_ai_search" not in go
+    assert "google_maps_grounding" in go
+
+
+def test_java_does_not_claim_names_it_does_not_define():
+    java = frameworks.get("adk-java").reserved
+    # Neither of these exists anywhere in the Java sources.
+    assert "finish_task" not in java
+    assert "task_completed" not in java
+    # Java-specific names, absent from Go.
+    assert "google_maps" in java
+    assert "vertex_ai_search" in java
+
+
+def test_names_common_to_both_frameworks_are_shared():
+    go = frameworks.get("adk-go").reserved
+    java = frameworks.get("adk-java").reserved
+    for name in ("set_model_response", "transfer_to_agent", "google_search",
+                 "url_context", "code_execution", "load_artifacts"):
+        assert name in go, name
+        assert name in java, name

@@ -121,8 +121,8 @@ checker.
 | key | framework | guarded / owned | transcribed from |
 |---|---|---|---|
 | `adk-python` | Google ADK (Python) | **4 / 5** | `src/google/adk/tools/mcp_tool/mcp_tool.py`, `_RESERVED_TOOL_NAMES` |
-| `adk-go` | Google ADK (Go) | **0 / 11** | `tool/mcptoolset/set.go` — **no guard present upstream** |
-| `adk-java` | Google ADK (Java) | **0 / 11** | `core/src/main/java/com/google/adk/tools/mcp/McpToolset.java` — **no guard present upstream** |
+| `adk-go` | Google ADK (Go) | **0 / 10** | string literals in the Go sources — **no guard present upstream** |
+| `adk-java` | Google ADK (Java) | **0 / 8** | `super("...")` literals in the Java sources — **no guard present upstream** |
 
 The `guarded` column is what the framework actually refuses today, transcribed
 from its source. The total is every name it puts on the wire. Where the two
@@ -134,6 +134,15 @@ construction. Saying otherwise — citing the file where a guard *would* live �
 would describe a defence that does not exist. The guards are proposed in
 [google/adk-go#1606](https://github.com/google/adk-go/pull/1606) and
 [google/adk-java#1515](https://github.com/google/adk-java/pull/1515).
+
+**The Go and Java lists are different, and deliberately so.** They are separate
+codebases with separate tool sets, and an earlier revision of this file carried
+one list into both — which produced false positives against whichever framework
+lacked a name, and a blind spot for the name it used instead. Go has no
+`google_maps` tool (its grounded-maps tool is `google_maps_grounding`, built by
+`internal/configurable/configurable_utils.go`) and no `vertex_ai_search`; Java
+has no `finish_task` or `task_completed`. Tests assert the two sets are not
+interchangeable.
 
 Adding a framework is a data edit in `nameguard/frameworks.py`; a `guarded` name
 that is not also `reserved` raises at import rather than reporting a status that
@@ -182,7 +191,7 @@ the moment you add a server, which is the moment nothing else checks.
 python -m pytest tests/
 ```
 
-43 tests covering the comparison, the guarded/unguarded split and its
+47 tests covering the comparison, the guarded/unguarded split and its
 import-time contradiction check, every payload shape, both transports driven by
 stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
 malformed, the failure mode where a bad response must not look like a clean
