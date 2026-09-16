@@ -1,12 +1,24 @@
 # mcp-nameguard
 
 Check the tool names an MCP server advertises against the names agent
-frameworks **reserve for their own tools**.
+frameworks **put on the wire themselves**.
 
-A reserved name is one the framework itself puts on the wire. When a server
-advertises the same name, the two tools compete for it — and depending on the
+A framework-owned name is one the framework itself registers. When a server
+advertises the same name the two tools compete for it — and depending on the
 framework the server's tool can end up holding it, so a call meant for the
 framework is dispatched to the server instead.
+
+Findings are reported in two grades, because *"the framework refuses this name"*
+and *"the framework owns this name and does not defend it"* are different facts,
+and only one of them is a server breaking a rule:
+
+| grade | meaning |
+|---|---|
+| `GUARDED` | the framework refuses the name at MCP registration — a server advertising it has broken a documented rule |
+| `UNGUARDED` | the framework puts the name on the wire and does **not** refuse it, so a server can simply take it |
+
+`UNGUARDED` is the more actionable of the two, and it is the reason this tool
+reports a framework's gaps rather than only its rules.
 
 This is a [cross-server tool shadowing](https://mcpsafe.io/threats/MCP-046)
 check, done as a **lookup against the frameworks' own source**, not a heuristic.
@@ -62,15 +74,16 @@ $ mcp-nameguard check --http https://example.com/mcp --header "Authorization: Be
 
 # Or check a saved tools/list payload:
 $ mcp-nameguard check tools.json
-COLLISION  set_model_response  (Google ADK (Python))
-           reserved in src/google/adk/tools/mcp_tool/mcp_tool.py
+UNGUARDED  set_model_response  (Google ADK (Python))
+           src/google/adk/tools/mcp_tool/mcp_tool.py, _RESERVED_TOOL_NAMES
            Injected by the output-schema processor whenever output_schema is
            set alongside other tools (flows/llm_flows/prompt/_schema.py) and
-           read back by name in base_llm_flow.py. It was missing from
-           _RESERVED_TOOL_NAMES until google/adk-python#7144.
+           read back by name in base_llm_flow.py. Request processors run
+           before tool resolution, so a server advertising this name is the
+           last-wins survivor.
 
-COLLISION  transfer_to_agent  (Google ADK (Python))
-           reserved in src/google/adk/tools/mcp_tool/mcp_tool.py
+GUARDED    transfer_to_agent  (Google ADK (Python))
+           src/google/adk/tools/mcp_tool/mcp_tool.py, _RESERVED_TOOL_NAMES
            The framework's own agent-transfer tool; also the name a server
            would need to hijack a hand-off.
 ```
@@ -105,15 +118,26 @@ checker.
 
 ## Supported frameworks
 
-| key | framework | names | transcribed from |
+| key | framework | guarded / owned | transcribed from |
 |---|---|---|---|
-| `adk-python` | Google ADK (Python) | 5 | `src/google/adk/tools/mcp_tool/mcp_tool.py` |
-| `adk-go` | Google ADK (Go) | 11 | `tool/mcptoolset/set.go` |
-| `adk-java` | Google ADK (Java) | 11 | `core/src/main/java/com/google/adk/tools/mcp/McpToolset.java` |
+| `adk-python` | Google ADK (Python) | **4 / 5** | `src/google/adk/tools/mcp_tool/mcp_tool.py`, `_RESERVED_TOOL_NAMES` |
+| `adk-go` | Google ADK (Go) | **0 / 11** | `tool/mcptoolset/set.go` — **no guard present upstream** |
+| `adk-java` | Google ADK (Java) | **0 / 11** | `core/src/main/java/com/google/adk/tools/mcp/McpToolset.java` — **no guard present upstream** |
 
-Every list is transcribed from the framework's own source and cites the file it
-came from; nothing is inferred. Adding a framework is a data edit in
-`nameguard/frameworks.py`.
+The `guarded` column is what the framework actually refuses today, transcribed
+from its source. The total is every name it puts on the wire. Where the two
+differ, the difference is a name a server can currently take.
+
+The Go and Java rows are not a transcription error: those frameworks were
+checked and have **no** reserved-name guard, so a collision there is unguarded by
+construction. Saying otherwise — citing the file where a guard *would* live —
+would describe a defence that does not exist. The guards are proposed in
+[google/adk-go#1606](https://github.com/google/adk-go/pull/1606) and
+[google/adk-java#1515](https://github.com/google/adk-java/pull/1515).
+
+Adding a framework is a data edit in `nameguard/frameworks.py`; a `guarded` name
+that is not also `reserved` raises at import rather than reporting a status that
+cannot exist.
 
 ## Has it found anything?
 
@@ -158,7 +182,8 @@ the moment you add a server, which is the moment nothing else checks.
 python -m pytest tests/
 ```
 
-36 tests covering the comparison, every payload shape, both transports driven by
+43 tests covering the comparison, the guarded/unguarded split and its
+import-time contradiction check, every payload shape, both transports driven by
 stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
 malformed, the failure mode where a bad response must not look like a clean
 scan, the CLI exit codes, and the per-name explanation.

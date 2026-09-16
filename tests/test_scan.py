@@ -78,7 +78,7 @@ def test_cli_exits_1_on_a_collision(tmp_path):
     f.write_text(json.dumps({"tools": [{"name": "set_model_response"}]}))
     result = _run("check", str(f))
     assert result.returncode == 1
-    assert "COLLISION" in result.stdout
+    assert "UNGUARDED" in result.stdout
     assert "set_model_response" in result.stdout
 
 
@@ -130,5 +130,71 @@ def test_explanation_is_specific_to_the_name():
 
 
 def test_explanation_falls_back_to_the_framework_note():
+    """A guarded name with no bespoke reason is explained by the framework note."""
+    adk_python = frameworks.get("adk-python")
+    assert adk_python.explain("adk_request_input") == adk_python.note
+
+
+def test_unguarded_name_is_explained_as_unguarded():
+    """The fallback for an unguarded name must say the framework does not refuse it."""
     adk_go = frameworks.get("adk-go")
-    assert adk_go.explain("google_maps") == adk_go.note
+    text = adk_go.explain("google_maps")
+    assert "does not refuse" in text
+    assert adk_go.name in text
+
+
+# --------------------------------------------------------------------------
+# guarded vs reserved: the distinction the tool now reports
+# --------------------------------------------------------------------------
+
+def test_guarded_is_always_a_subset_of_reserved():
+    for fw in frameworks.FRAMEWORKS:
+        assert fw.guarded <= fw.reserved, fw.key
+
+
+def test_python_reports_the_single_unguarded_framework_owned_name():
+    fw = frameworks.get("adk-python")
+    assert fw.guarded == {
+        "adk_request_credential", "adk_request_confirmation",
+        "adk_request_input", "transfer_to_agent",
+    }
+    assert fw.reserved - fw.guarded == {"set_model_response"}
+
+
+def test_frameworks_without_an_upstream_guard_report_nothing_guarded():
+    """Go and Java have no reserved-name guard upstream; that must be visible.
+
+    Reporting these names as *reserved* without saying they are unguarded would
+    describe a defence that does not exist.
+    """
+    for key in ("adk-go", "adk-java"):
+        fw = frameworks.get(key)
+        assert fw.guarded == frozenset(), key
+        assert fw.reserved, key
+        assert "no guard" in fw.source.lower() or "No guard" in fw.note, key
+
+
+def test_status_is_reported_per_finding():
+    guarded, unguarded = scan_names(
+        ["transfer_to_agent", "set_model_response"],
+        targets=[frameworks.get("adk-python")],
+    )
+    by_tool = {f.tool: f.status for f in [guarded, unguarded]}
+    assert by_tool == {
+        "transfer_to_agent": "guarded",
+        "set_model_response": "unguarded",
+    }
+
+
+def test_json_output_carries_the_status():
+    (finding,) = scan_names(["set_model_response"], targets=[frameworks.get("adk-go")])
+    assert finding.as_dict()["status"] == "unguarded"
+
+
+def test_a_guarded_name_outside_reserved_is_rejected():
+    """A contradiction must fail at construction, not produce an impossible status."""
+    with pytest.raises(ValueError, match="guarded names missing from reserved"):
+        frameworks.Framework(
+            key="broken", name="Broken", reserved=frozenset({"a"}),
+            guarded=frozenset({"b"}), source="x/y.py", note="n",
+        )

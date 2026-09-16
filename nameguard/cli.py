@@ -83,12 +83,19 @@ def _select(keys: Sequence[str] | None) -> tuple[framework, ...]:
     return tuple(frameworks.get(k) for k in keys)
 
 
+def _by_severity(findings):
+    """Unguarded collisions first: nothing in the framework refuses those names."""
+    return sorted(findings, key=lambda f: (f.status == "guarded", f.tool, f.framework.key))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     if args.command == "frameworks":
         for fw in frameworks.FRAMEWORKS:
-            print(f"{fw.key}\t{len(fw.reserved)} names\t{fw.name}")
+            print(
+                f"{fw.key}\t{len(fw.guarded)}/{len(fw.reserved)} guarded\t{fw.name}"
+            )
         return 0
 
     if args.command == "list":
@@ -125,9 +132,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.json:
             print(json.dumps([f.as_dict() for f in findings], indent=2))
         elif findings:
-            for f in findings:
-                print(f"COLLISION  {f.tool}  ({f.framework.name})")
-                print(f"           reserved in {f.framework.source}")
+            for f in _by_severity(findings):
+                print(f"{f.status.upper():9}  {f.tool}  ({f.framework.name})")
+                print(f"           {f.framework.source}")
                 print(f"           {f.framework.explain(f.tool)}")
         else:
             print(f"No collisions among {len(names)} tool(s).")
@@ -152,9 +159,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(json.dumps([f.as_dict() for f in findings], indent=2))
     elif findings:
-        for f in findings:
-            print(f"COLLISION  {f.tool}  ({f.framework.name})")
-            print(f"           reserved in {f.framework.source}")
+        for f in _by_severity(findings):
+            print(f"{f.status.upper():9}  {f.tool}  ({f.framework.name})")
+            print(f"           {f.framework.source}")
             print(f"           {f.framework.explain(f.tool)}")
     else:
         print("No collisions.")

@@ -15,11 +15,22 @@ class Finding:
     tool: str
     framework: Framework
 
+    @property
+    def status(self) -> str:
+        """``guarded`` if the framework refuses the name, else ``unguarded``.
+
+        The distinction is the finding: a guarded collision is a server that
+        broke a documented rule, an unguarded one is a server taking a name the
+        framework owns and does not defend.
+        """
+        return self.framework.status(self.tool)
+
     def as_dict(self) -> dict[str, str]:
         return {
             "tool": self.tool,
             "framework": self.framework.key,
             "framework_name": self.framework.name,
+            "status": self.status,
             "source": self.framework.source,
             "why": self.framework.explain(self.tool),
         }
