@@ -11,7 +11,7 @@ from . import __version__
 from . import frameworks
 from .mcp_http import McpHttpError, list_tools_http
 from .mcp_stdio import McpError, McpStdioError, list_tools_stdio
-from .scan import load, scan_payload, scan_names
+from .scan import InputError, load, payload_from_text, scan_payload, scan_names
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -144,17 +144,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("error: give a path, or --stdio COMMAND", file=sys.stderr)
         return 2
 
-    if args.path == "-":
-        text = sys.stdin.read().strip()
-        payload = (
-            json.loads(text)
-            if text.startswith(("[", "{"))
-            else [line.strip() for line in text.splitlines() if line.strip()]
-        )
-    else:
-        payload = load(args.path)
-
-    findings = scan_payload(payload, targets)
+    try:
+        if args.path == "-":
+            payload = payload_from_text(sys.stdin.read())
+        else:
+            payload = load(args.path)
+        findings = scan_payload(payload, targets)
+    except (InputError, TypeError, ValueError) as exc:
+        # An input that cannot be read is not an input that found nothing.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.json:
         print(json.dumps([f.as_dict() for f in findings], indent=2))

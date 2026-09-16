@@ -7,7 +7,13 @@ import sys
 import pytest
 
 from nameguard import frameworks
-from nameguard.scan import names_from_payload, scan_names, scan_payload
+from nameguard.scan import (
+    InputError,
+    names_from_payload,
+    payload_from_text,
+    scan_names,
+    scan_payload,
+)
 
 
 def test_detects_a_reserved_name_across_every_framework_that_reserves_it():
@@ -105,6 +111,80 @@ def test_cli_reads_a_plain_name_list(tmp_path):
     result = _run("check", str(f))
     assert result.returncode == 1
     assert "transfer_to_agent" in result.stdout
+
+
+# ---- the input must be readable, or it is not a clean scan -----------------
+
+def _run_stdin(text, *args):
+    return subprocess.run(
+        [sys.executable, "-m", "nameguard.cli", *args],
+        input=text, capture_output=True, text=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "not json",
+        "mcp-inspector: command not found",
+        "Traceback (most recent call last):\n  File ...",
+        '{"tools": [',
+    ],
+)
+def test_cli_fails_closed_on_unreadable_stdin(text):
+    """Regression: this was a fail-open, and it was the documented pipeline.
+
+    `check -` treated anything not starting with `[` or `{` as a
+    newline-separated list of names. The README documents
+
+        mcp-inspector list-tools --json | mcp-nameguard check -
+
+    so when the command on the left failed, its error text arrived here, became
+    a one-element "name list" that matched nothing, and the tool printed
+    "No collisions." and exited 0. The names were never read and the scan
+    reported that nothing was wrong -- the failure the exit-code contract
+    exists to prevent, in the tool that documents it.
+    """
+    result = _run_stdin(text, "check", "-")
+    assert result.returncode == 2, result.stdout
+    assert "No collisions" not in result.stdout
+
+
+def test_cli_fails_closed_on_a_missing_file(tmp_path):
+    result = _run("check", str(tmp_path / "nope.json"))
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_fails_closed_on_a_payload_of_the_wrong_shape(tmp_path):
+    f = tmp_path / "wrong.json"
+    f.write_text('{"unexpected": 1}')
+    result = _run("check", str(f))
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+
+
+def test_a_plain_name_list_still_works_after_the_fix():
+    """The feature this must not break: names copied by hand."""
+    result = _run_stdin("get_weather\ntransfer_to_agent\n", "check", "-")
+    assert result.returncode == 1
+    assert "transfer_to_agent" in result.stdout
+
+
+def test_payload_from_text_accepts_both_documented_forms():
+    assert payload_from_text('{"tools": [{"name": "a"}]}') == {"tools": [{"name": "a"}]}
+    assert payload_from_text("a\nb\n") == ["a", "b"]
+
+
+@pytest.mark.parametrize("text", ["", "   \n  \n", "not json", "two words"])
+def test_payload_from_text_rejects_what_it_cannot_read(text):
+    with pytest.raises(InputError):
+        payload_from_text(text)
+
+
+def test_payload_from_text_accepts_the_separators_tool_names_use():
+    names = ["tool_one", "mcp.server.name", "ns:tool", "a/b"]
+    assert payload_from_text("\n".join(names)) == names
 
 
 def test_cli_frameworks_lists_all():

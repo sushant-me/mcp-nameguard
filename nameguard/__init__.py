@@ -5,7 +5,7 @@ from .mcp_http import McpHttpError, list_tools_http
 from .mcp_stdio import McpError, McpStdioError, list_tools_stdio
 from .scan import Finding, load, names_from_payload, scan_names, scan_payload
 
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 
 __all__ = [
     "FRAMEWORKS", "Framework", "Finding", "all_guarded", "all_reserved", "get",
