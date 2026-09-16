@@ -152,13 +152,17 @@ def test_guarded_is_always_a_subset_of_reserved():
         assert fw.guarded <= fw.reserved, fw.key
 
 
-def test_python_reports_the_single_unguarded_framework_owned_name():
+def test_python_reports_the_upstream_guard_exactly():
+    """Guarded is what the upstream set literally contains; the rest is the gap."""
     fw = frameworks.get("adk-python")
     assert fw.guarded == {
         "adk_request_credential", "adk_request_confirmation",
         "adk_request_input", "transfer_to_agent",
     }
-    assert fw.reserved - fw.guarded == {"set_model_response"}
+    # Everything else this framework owns is unguarded, set_model_response and
+    # the skill/loop tools included.
+    assert "set_model_response" in fw.reserved - fw.guarded
+    assert len(fw.reserved - fw.guarded) > 1
 
 
 def test_frameworks_without_an_upstream_guard_report_nothing_guarded():
@@ -258,3 +262,16 @@ def test_names_common_to_both_frameworks_are_shared():
                  "url_context", "code_execution", "load_artifacts"):
         assert name in go, name
         assert name in java, name
+
+
+def test_framework_shipped_tools_are_reserved_in_every_framework():
+    """Skill and loop tools are framework-owned in all three ports.
+
+    None of them were in any list. The sets had grown by hand, one reported name
+    at a time, and nothing ever enumerated the tools the frameworks actually
+    ship -- so three successive corrections each found more gaps. This test asks
+    the question the hand-edits did not.
+    """
+    for name in ("exit_loop", "list_skills", "load_skill", "load_skill_resource"):
+        for fw in frameworks.FRAMEWORKS:
+            assert name in fw.reserved, f"{name!r} missing from {fw.key}"

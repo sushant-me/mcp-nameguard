@@ -89,6 +89,12 @@ _ADK_PYTHON = Framework(
         "adk_request_input",            # REQUEST_INPUT_FUNCTION_CALL_NAME
         "transfer_to_agent",
         "set_model_response",
+        # Framework-shipped tools a caller can add. None are in the upstream
+        # guard either, so they are unguarded like set_model_response.
+        "exit_loop",
+        "list_skills",
+        "load_skill",
+        "load_skill_resource",
     }),
     guarded=frozenset({
         "adk_request_credential",
@@ -134,6 +140,7 @@ _ADK_GO = Framework(
         "set_model_response", "transfer_to_agent", "finish_task",
         "task_completed", "google_search", "google_maps_grounding",
         "url_context", "code_execution", "load_artifacts", "load_memory",
+        "exit_loop", "list_skills", "load_skill", "load_skill_resource",
     }),
     guarded=frozenset(),
     source="tool/mcptoolset/set.go (no guard present upstream)",
@@ -170,6 +177,7 @@ _ADK_JAVA = Framework(
         "set_model_response", "transfer_to_agent", "google_search",
         "google_maps", "url_context", "vertex_ai_search", "code_execution",
         "load_artifacts", "loadMemory",
+        "exit_loop", "list_skills", "load_skill", "load_skill_resource",
     }),
     guarded=frozenset(),
     source="core/src/main/java/com/google/adk/tools/mcp/McpToolset.java "
