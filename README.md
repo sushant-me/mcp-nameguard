@@ -122,7 +122,7 @@ checker.
 |---|---|---|---|
 | `adk-python` | Google ADK (Python) | **4 / 5** | `src/google/adk/tools/mcp_tool/mcp_tool.py`, `_RESERVED_TOOL_NAMES` |
 | `adk-go` | Google ADK (Go) | **0 / 10** | string literals in the Go sources — **no guard present upstream** |
-| `adk-java` | Google ADK (Java) | **0 / 8** | `super("...")` literals in the Java sources — **no guard present upstream** |
+| `adk-java` | Google ADK (Java) | **0 / 9** | `super("...")` literals in the Java sources — **no guard present upstream** |
 
 The `guarded` column is what the framework actually refuses today, transcribed
 from its source. The total is every name it puts on the wire. Where the two
@@ -141,7 +141,8 @@ one list into both — which produced false positives against whichever framewor
 lacked a name, and a blind spot for the name it used instead. Go has no
 `google_maps` tool (its grounded-maps tool is `google_maps_grounding`, built by
 `internal/configurable/configurable_utils.go`) and no `vertex_ai_search`; Java
-has no `finish_task` or `task_completed`. Tests assert the two sets are not
+has no `finish_task` or `task_completed`, and spells its memory tool
+`loadMemory` rather than the other ports' `load_memory`. Tests assert the two sets are not
 interchangeable.
 
 Adding a framework is a data edit in `nameguard/frameworks.py`; a `guarded` name
@@ -191,7 +192,7 @@ the moment you add a server, which is the moment nothing else checks.
 python -m pytest tests/
 ```
 
-47 tests covering the comparison, the guarded/unguarded split and its
+48 tests covering the comparison, the guarded/unguarded split and its
 import-time contradiction check, every payload shape, both transports driven by
 stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
 malformed, the failure mode where a bad response must not look like a clean

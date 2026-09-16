@@ -158,16 +158,18 @@ _ADK_GO = Framework(
 # `finish_task` and `task_completed` — so they were reported as collisions
 # against a framework that does not define them.
 #
-# `LoadMemoryTool` exists but takes its name from the `loadMemory` method
-# rather than a literal, so its exact wire name was not verified and it is
-# deliberately left out rather than guessed at.
+# This port spells the memory tool `loadMemory`, not the `load_memory` the
+# others use. Java takes a tool's name from the method name when the method
+# carries no @Annotations.Schema, and `LoadMemoryTool#loadMemory` annotates only
+# its parameter, so `FunctionTool` falls back to `func.getName()`. Verified in
+# core/src/main/java/com/google/adk/tools/FunctionTool.java.
 _ADK_JAVA = Framework(
     key="adk-java",
     name="Google ADK (Java)",
     reserved=frozenset({
         "set_model_response", "transfer_to_agent", "google_search",
         "google_maps", "url_context", "vertex_ai_search", "code_execution",
-        "load_artifacts",
+        "load_artifacts", "loadMemory",
     }),
     guarded=frozenset(),
     source="core/src/main/java/com/google/adk/tools/mcp/McpToolset.java "

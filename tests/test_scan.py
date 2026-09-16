@@ -238,6 +238,19 @@ def test_java_does_not_claim_names_it_does_not_define():
     assert "vertex_ai_search" in java
 
 
+def test_java_memory_tool_uses_the_java_spelling():
+    """`loadMemory`, not the `load_memory` the other ports use.
+
+    Java derives a tool's name from the method name when there is no
+    @Annotations.Schema on the method, which is the case for LoadMemoryTool.
+    Getting this wrong is a silent gap: the guard would never see the name the
+    framework actually puts on the wire.
+    """
+    java = frameworks.get("adk-java").reserved
+    assert "loadMemory" in java
+    assert "load_memory" not in java
+
+
 def test_names_common_to_both_frameworks_are_shared():
     go = frameworks.get("adk-go").reserved
     java = frameworks.get("adk-java").reserved
