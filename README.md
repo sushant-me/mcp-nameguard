@@ -152,21 +152,37 @@ cannot exist.
 ## Has it found anything?
 
 Being straight about this, because a checker that cannot fail is not worth
-running:
+running. Every line below is a live `tools/list` against a real server, not a
+static reading of source:
 
-* The three official servers — `server-filesystem`, `server-memory`,
-  `server-everything` — advertise 14, 9 and 13 tools respectively. **None
-  collides.**
-* A sample of community servers that wrap Google Search and Google Maps name
-  their tools distinctly (`search`, `read_webpage`, `get_geocode`,
-  `search_nearby`, …) rather than after a framework-owned tool. **None
-  collides.**
+| server | tools | result |
+|---|---|---|
+| `server-filesystem` | 14 | no collisions |
+| `server-everything` | 13 | no collisions |
+| `server-memory` | 9 | no collisions |
+| `server-sequential-thinking` | 1 | no collisions |
+| `@google-cloud/storage-mcp` | 15 | no collisions |
+| `firecrawl-mcp` | 25 | no collisions |
+| `chrome-devtools-mcp` | 29 | no collisions |
+| `@google-cloud/observability-mcp` | 13 | no collisions |
+| `@upstash/context7-mcp` | 2 | no collisions |
+
+**121 tools across 9 servers, zero collisions.** The Google Cloud servers are the
+interesting ones to have clean: they are the implementations most plausibly
+tempted to name a tool `google_search`, and they do not.
+
+Five more servers could not be read — `mcp-server-gsc`,
+`@sentry/mcp-server`, `@google-cloud/gcloud-mcp`,
+`mcp-server-google-search-console`, `@fdcicyber/google-search-mcp` — all failing
+or timing out because they need credentials this machine does not have. **Each
+was reported as an error, not as a clean scan.** That is the exit-code-2 design
+working on real, failing servers rather than on a fixture.
 
 So treat this as **preventive**, not as a report of a known-broken situation. The
 collision it guards against is real — `google/adk-python` shipped a guard for
 exactly this and was still missing a name from it
-([#7144](https://github.com/google/adk-python/issues/7144)) — but the servers I
-have looked at so far name their tools sensibly. The check is cheap insurance at
+([#7144](https://github.com/google/adk-python/issues/7144)) — but every server I
+have been able to read names its tools sensibly. The check is cheap insurance at
 the moment you add a server, which is the moment nothing else checks.
 
 ## Scope, honestly
