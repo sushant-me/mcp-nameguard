@@ -51,9 +51,13 @@ No runtime dependencies, Python 3.9+.
 
 ## Use
 
-Point it at a `tools/list` result, a JSON list, or a file of names:
+Point it at a live server, a `tools/list` result, a JSON list, or a file of names:
 
 ```bash
+# Ask a running MCP server for its tools, before you wire it into an agent:
+$ mcp-nameguard check --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp"
+
+# Or check a saved tools/list payload:
 $ mcp-nameguard check tools.json
 COLLISION  set_model_response  (Google ADK (Python))
            reserved in src/google/adk/tools/mcp_tool/mcp_tool.py
@@ -83,6 +87,19 @@ mcp-nameguard frameworks
 mcp-inspector list-tools --json | mcp-nameguard check -
 ```
 
+### Exit codes
+
+| code | meaning |
+|---|---|
+| `0` | no collisions |
+| `1` | collisions found |
+| `2` | the server or input could not be read |
+
+Code `2` matters: a server that fails to start, times out, or answers with a
+malformed `tools/list` is reported as an **error**, never as an empty — and
+therefore apparently clean — result. A checker that fails open is worse than no
+checker.
+
 ## Supported frameworks
 
 | key | framework | names | transcribed from |
@@ -97,6 +114,10 @@ came from; nothing is inferred. Adding a framework is a data edit in
 
 ## Scope, honestly
 
+* Talking to a server over stdio is deliberately minimal: `initialize`,
+  `notifications/initialized`, `tools/list`. It does not call any tool and does
+  not read tool output. Servers reachable only over HTTP/SSE are not supported
+  yet.
 * It checks **name collisions only**. It does not read tool descriptions, so it
   will not catch prompt injection or tool poisoning hidden in prose — those are
   different problems with different tools.
@@ -114,9 +135,10 @@ came from; nothing is inferred. Adding a framework is a data edit in
 python -m pytest tests/
 ```
 
-20 tests covering the comparison, every payload shape, the failure mode where
-malformed input must not look like a clean scan, the CLI exit codes, and the
-per-name explanation.
+28 tests covering the comparison, every payload shape, the stdio client driven
+by a stub server that banners, errors, exits, hangs and answers malformed, the
+failure mode where a bad response must not look like a clean scan, the CLI exit
+codes, and the per-name explanation.
 
 ## Licence
 

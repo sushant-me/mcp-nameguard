@@ -9,7 +9,8 @@ from typing import Sequence
 
 from . import __version__
 from . import frameworks
-from .scan import load, scan_payload
+from .mcp_stdio import McpStdioError, list_tools_stdio
+from .scan import load, scan_payload, scan_names
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -24,9 +25,32 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     check = sub.add_parser(
-        "check", help="scan a tools/list JSON payload (or a file of names, or - for stdin)"
+        "check",
+        help=(
+            "check a tools/list JSON payload, a file of names, stdin, or a live "
+            "MCP server over stdio"
+        ),
     )
-    check.add_argument("path", help="JSON file, newline-separated names, or - for stdin")
+    check.add_argument(
+        "path",
+        nargs="?",
+        help="JSON file, newline-separated names, or - for stdin",
+    )
+    check.add_argument(
+        "--stdio",
+        metavar="COMMAND",
+        help=(
+            "start an MCP server with this command and ask it for its tools, "
+            'e.g. --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp"'
+        ),
+    )
+    check.add_argument(
+        "--timeout",
+        type=float,
+        default=20.0,
+        metavar="SECONDS",
+        help="how long to wait for the server (default 20)",
+    )
     check.add_argument(
         "--framework", action="append", metavar="KEY",
         help="limit to a framework (repeatable); default is all",
@@ -62,6 +86,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     targets = _select(args.framework)
+
+    if args.stdio:
+        try:
+            names = list_tools_stdio(args.stdio, timeout_s=args.timeout)
+        except McpStdioError as exc:
+            # A server we could not query is not a clean result.
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        findings = scan_names(names, targets)
+        if args.json:
+            print(json.dumps([f.as_dict() for f in findings], indent=2))
+        elif findings:
+            for f in findings:
+                print(f"COLLISION  {f.tool}  ({f.framework.name})")
+                print(f"           reserved in {f.framework.source}")
+                print(f"           {f.framework.explain(f.tool)}")
+        else:
+            print(f"No collisions among {len(names)} tool(s).")
+        return 1 if findings else 0
+
+    if not args.path:
+        print("error: give a path, or --stdio COMMAND", file=sys.stderr)
+        return 2
 
     if args.path == "-":
         text = sys.stdin.read().strip()
