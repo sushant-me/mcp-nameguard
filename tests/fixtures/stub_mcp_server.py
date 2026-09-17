@@ -7,10 +7,22 @@ Modes (first argument):
   exit     say nothing and exit
   quiet    answer initialize, then never answer tools/list
   broken   answer with a reply whose result has no tool array
+  chatty   answer normally while logging to stderr, past any pipe buffer size
+  noisy-fail  refuse tools/list while logging the reason to stderr
 """
 
 import json
+import os
 import sys
+
+# Comfortably larger than a pipe buffer (64 KiB on Linux), so a client that
+# pipes stderr without reading it will see this server block inside write().
+CHATTY_LINES = int(os.environ.get("STUB_CHATTY_LINES", "4000"))
+
+
+def log(text):
+    sys.stderr.write(text + "\n")
+    sys.stderr.flush()
 
 
 def reply(msg_id, result):
@@ -40,6 +52,11 @@ def main() -> int:
         method = message.get("method")
         msg_id = message.get("id")
 
+        if mode == "chatty":
+            # Logging to stderr is what the MCP spec designates stderr for.
+            for i in range(CHATTY_LINES):
+                log(f"[info] loading tool {i} of {CHATTY_LINES}")
+
         if method == "initialize":
             reply(msg_id, {
                 "protocolVersion": "2024-11-05",
@@ -55,6 +72,14 @@ def main() -> int:
                 sys.stdout.write(json.dumps({
                     "jsonrpc": "2.0", "id": msg_id,
                     "error": {"code": -32601, "message": "tools/list not supported"},
+                }) + "\n")
+                sys.stdout.flush()
+                continue
+            if mode == "noisy-fail":
+                log("[error] refusing tools/list: config file not found")
+                sys.stdout.write(json.dumps({
+                    "jsonrpc": "2.0", "id": msg_id,
+                    "error": {"code": -32603, "message": "internal error"},
                 }) + "\n")
                 sys.stdout.flush()
                 continue

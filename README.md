@@ -106,6 +106,14 @@ mcp-nameguard frameworks
 mcp-inspector list-tools --json | mcp-nameguard check -
 ```
 
+Stdin accepts either a JSON payload or one tool name per line, and the two are
+told apart by shape: a name list is names and separators only. That is enough to
+refuse a shell message or a traceback, and it is *not* enough to refuse a single
+bare word, which is a legal name and also what a failed `--json` command
+sometimes prints. Complete JSON values are the exception and are classified -
+`null`, `true`, `false` and a bare number are rejected rather than read as a tool
+named `null`. For a pipeline, prefer `--json`, where the payload is unambiguous.
+
 ### Exit codes
 
 | code | meaning |

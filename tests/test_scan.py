@@ -187,6 +187,48 @@ def test_payload_from_text_accepts_the_separators_tool_names_use():
     assert payload_from_text("\n".join(names)) == names
 
 
+def test_payload_from_text_accepts_a_leading_separator():
+    """`_tool` and `-tool` are ordinary names, so the first character is not
+    special. The list used to be rejected whole, and with it every other name on
+    every line, on the strength of that one leading character.
+    """
+    names = ["_get_weather", "-tool", ".hidden", "__dunder__", "_"]
+    assert payload_from_text("\n".join(names)) == names
+
+
+def test_a_leading_underscore_name_is_not_read_as_a_failed_command():
+    """The rejected-name message used to assert the pipeline command had failed.
+
+    That claim is not available from the text, and here it was also false: the
+    name is legal and the command succeeded.
+    """
+    assert payload_from_text("_get_weather\n") == ["_get_weather"]
+
+
+@pytest.mark.parametrize("text", ["null", "true", "false", "123", "-4.5"])
+def test_payload_from_text_rejects_a_bare_json_scalar(text):
+    """A failed `--json` command prints one of these; read as a name list each
+    becomes a single tool that collides with nothing, which is a clean scan for
+    a payload that was never a tool list."""
+    with pytest.raises(InputError) as excinfo:
+        payload_from_text(text)
+    assert "not a tools/list payload" in str(excinfo.value)
+
+
+def test_a_bare_json_scalar_does_not_reach_the_scanner():
+    """The whole point: it must not exit 0 with "No collisions"."""
+    result = _run_stdin("null\n", "check", "-")
+    assert result.returncode == 2
+    assert "No collisions" not in result.stdout
+
+
+def test_the_rejection_message_does_not_claim_the_command_failed():
+    """It cannot know that, and saying so sent the reader after the wrong bug."""
+    with pytest.raises(InputError) as excinfo:
+        payload_from_text("not json")
+    assert "probably failed" not in str(excinfo.value)
+
+
 def test_cli_frameworks_lists_all():
     result = _run("frameworks")
     assert result.returncode == 0

@@ -16,12 +16,15 @@ import queue
 import shlex
 import subprocess
 import threading
+from collections import deque
 from typing import Any
+
+from ._version import __version__
 
 __all__ = ["McpError", "McpStdioError", "list_tools_stdio", "PROTOCOL_VERSION"]
 
 PROTOCOL_VERSION = "2024-11-05"
-CLIENT_INFO = {"name": "mcp-nameguard", "version": "0.3.0"}
+CLIENT_INFO = {"name": "mcp-nameguard", "version": __version__}
 
 
 class McpError(RuntimeError):
@@ -82,6 +85,43 @@ class _Reader(threading.Thread):
         return None
 
 
+class _StderrDrain(threading.Thread):
+    """Reads the server's stderr so that a logging server cannot block on it.
+
+    MCP puts the protocol on stdout and designates stderr for logging, so a
+    server that writes there is behaving correctly. Piping stderr and then never
+    reading it is the client's error, and it is not a harmless one: once the
+    pipe buffer fills, the server blocks inside `write()` and stops answering,
+    so a server that already replied is reported as one that never did. Draining
+    stdout alone left exactly that hole, because a pipe fills whether or not the
+    other end is a protocol stream.
+
+    The last few lines are kept so a failure can quote what the server was
+    saying rather than only that nothing arrived.
+    """
+
+    daemon = True
+
+    def __init__(self, stream, keep: int = 20) -> None:
+        super().__init__()
+        self._stream = stream
+        self._tail: deque[str] = deque(maxlen=keep)
+
+    def run(self) -> None:
+        try:
+            for line in self._stream:
+                line = line.rstrip()
+                if line:
+                    self._tail.append(line)
+        except (OSError, ValueError):
+            # The pipe closed under us, which is what shutdown looks like.
+            pass
+
+    def detail(self) -> str:
+        """The last stderr lines, one per line, or "" if the server was silent."""
+        return "\n           ".join(self._tail)
+
+
 def _send(proc: subprocess.Popen, message: dict[str, Any]) -> None:
     assert proc.stdin is not None
     try:
@@ -140,23 +180,35 @@ def list_tools_stdio(command: str, timeout_s: float = 20.0) -> list[str]:
 
     reader = _Reader(proc.stdout)
     reader.start()
+    # stderr has to be drained too, and for the same reason as stdout: it is a
+    # pipe, it fills, and a server that logs is expected to use it.
+    stderr_drain = _StderrDrain(proc.stderr)
+    stderr_drain.start()
 
     try:
-        _send(proc, {
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": CLIENT_INFO,
-            },
-        })
-        handshake = _await_id(reader, 1, timeout_s)
-        result = handshake.get("result")
-        if not isinstance(result, dict):
-            raise McpStdioError("the initialize reply had no result object")
-        _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-        _send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-        listing = _await_id(reader, 2, timeout_s)
+        try:
+            _send(proc, {
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": CLIENT_INFO,
+                },
+            })
+            handshake = _await_id(reader, 1, timeout_s)
+            result = handshake.get("result")
+            if not isinstance(result, dict):
+                raise McpStdioError("the initialize reply had no result object")
+            _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+            _send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+            listing = _await_id(reader, 2, timeout_s)
+        except McpStdioError as exc:
+            # Whatever the server was saying while it failed is usually the
+            # reason, and it is already in hand.
+            detail = stderr_drain.detail()
+            if detail:
+                raise McpStdioError(f"{exc} (last server stderr: {detail})") from None
+            raise
     finally:
         _terminate(proc)
 

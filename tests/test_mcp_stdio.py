@@ -57,3 +57,37 @@ def test_missing_command_is_reported_clearly():
 def test_empty_command_is_rejected():
     with pytest.raises(McpStdioError):
         list_tools_stdio("   ")
+
+
+def test_a_server_that_logs_to_stderr_still_answers():
+    """The MCP spec designates stderr for logging, so logging is not a failure.
+
+    This server is the `normal` one with log output added; the only variable is
+    how much it writes. Piping stderr without reading it blocks the server in
+    `write()` once the pipe buffer is full, and the client then reports a server
+    that already replied as one that never did.
+    """
+    names = list_tools_stdio(_cmd("chatty"), timeout_s=15)
+    assert names == ["get_weather", "transfer_to_agent", "set_model_response"]
+
+
+def test_a_small_log_is_below_the_pipe_buffer_and_answers(monkeypatch):
+    """The paired fixture for the test above: the same server, same protocol
+    traffic, and only the log volume changed.
+
+    Small logs fit in the pipe buffer, so they always worked; large ones did not.
+    Pinning both is what shows the buffer, and not the server, was deciding.
+    """
+    monkeypatch.setenv("STUB_CHATTY_LINES", "200")
+    names = list_tools_stdio(_cmd("chatty"), timeout_s=15)
+    assert names == ["get_weather", "transfer_to_agent", "set_model_response"]
+
+
+def test_a_failure_quotes_what_the_server_said_on_stderr():
+    """The reason a server refused is already in hand; report it, not just that
+    nothing arrived."""
+    with pytest.raises(McpStdioError) as excinfo:
+        list_tools_stdio(_cmd("noisy-fail"), timeout_s=15)
+    message = str(excinfo.value)
+    assert "config file not found" in message
+    assert "stderr" in message
