@@ -124,19 +124,32 @@ checker.
 | key | framework | guarded / owned | transcribed from |
 |---|---|---|---|
 | `adk-python` | Google ADK (Python) | **4 / 9** | `src/google/adk/tools/mcp_tool/mcp_tool.py`, `_RESERVED_TOOL_NAMES` |
-| `adk-go` | Google ADK (Go) | **0 / 14** | string literals in the Go sources — **no guard present upstream** |
-| `adk-java` | Google ADK (Java) | **0 / 13** | `super("...")` literals in the Java sources — **no guard present upstream** |
+| `adk-go` | Google ADK (Go) | **10 / 14** | `tool/toolutils/toolutils.go` — `PackTool` refuses a duplicate name |
+| `adk-java` | Google ADK (Java) | **8 / 13** | `models/LlmRequest.java` — `appendTools` merger throws on a duplicate |
 
 The `guarded` column is what the framework actually refuses today, transcribed
 from its source. The total is every name it puts on the wire. Where the two
 differ, the difference is a name a server can currently take.
 
-The Go and Java rows are not a transcription error: those frameworks were
-checked and have **no** reserved-name guard, so a collision there is unguarded by
-construction. Saying otherwise — citing the file where a guard *would* live —
-would describe a defence that does not exist. The guards are proposed in
-[google/adk-go#1606](https://github.com/google/adk-go/pull/1606) and
-[google/adk-java#1515](https://github.com/google/adk-java/pull/1515).
+**Neither Go nor Java has a reserved-name list, and an earlier revision of this
+file reported that as "nothing is guarded". That was wrong**, and it is worth
+saying plainly because the mistake is easy to repeat: absence of a *list* is not
+absence of a *check*. A server cannot take a name the framework packs, because a
+duplicate is refused when the request is built — `toolutils.PackTool` returns
+`duplicate tool: %q`, and Java's `appendTools` merger throws
+`Duplicate tool name`. Both fail closed, so the packed callables are guarded.
+
+What stays open is the **in-model built-ins** (`google_search`,
+`google_maps_grounding`, `url_context`, `code_execution`). `geminitool.setTool`
+in Go, and `GoogleSearchTool` / `GoogleMapsTool` / `UrlContextTool` /
+`VertexAiSearchTool` / `BuiltInCodeExecutionTool` in Java, append straight to
+`config.Tools` and never pass through either check — so a server advertising one
+is accepted, and both tools end up advertised under the same name. On
+[google/adk-go#1606](https://github.com/google/adk-go/pull/1606) a maintainer
+measured the consequence: the model became non-deterministic about which of the
+two it called. That PR is withdrawn — refusing the server's tool is a policy
+trade-off rather than the fix — but the measurement is what corrected this
+table.
 
 **The Go and Java lists are different, and deliberately so.** They are separate
 codebases with separate tool sets, and an earlier revision of this file carried
@@ -219,7 +232,7 @@ the moment you add a server, which is the moment nothing else checks.
 python -m pytest tests/
 ```
 
-49 tests covering the comparison, the guarded/unguarded split and its
+63 tests covering the comparison, the guarded/unguarded split and its
 import-time contradiction check, every payload shape, both transports driven by
 stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
 malformed, the failure mode where a bad response must not look like a clean

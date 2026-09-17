@@ -216,11 +216,21 @@ def test_explanation_falls_back_to_the_framework_note():
 
 
 def test_unguarded_name_is_explained_as_unguarded():
-    """The fallback for an unguarded name must say the framework does not refuse it."""
+    """An unguarded name must be explained as a name the framework does not refuse."""
     adk_go = frameworks.get("adk-go")
-    text = adk_go.explain("google_search")
+    assert "does not refuse" in adk_go.explain("google_search")
+
+
+def test_generic_unguarded_fallback_names_the_framework():
+    """A reserved-but-unguarded name with no bespoke reason must still say so."""
+    fw = frameworks.Framework(
+        key="synthetic", name="Synthetic Framework",
+        reserved=frozenset({"thing"}), guarded=frozenset(),
+        source="nowhere", note="n/a",
+    )
+    text = fw.explain("thing")
     assert "does not refuse" in text
-    assert adk_go.name in text
+    assert "Synthetic Framework" in text
 
 
 # --------------------------------------------------------------------------
@@ -245,17 +255,31 @@ def test_python_reports_the_upstream_guard_exactly():
     assert len(fw.reserved - fw.guarded) > 1
 
 
-def test_frameworks_without_an_upstream_guard_report_nothing_guarded():
-    """Go and Java have no reserved-name guard upstream; that must be visible.
+def test_go_and_java_guard_the_packed_callables_not_the_builtins():
+    """Neither has a reserved-name list, but neither is undefended either.
 
-    Reporting these names as *reserved* without saying they are unguarded would
-    describe a defence that does not exist.
+    A previous revision of this file reported Go and Java as guarding nothing,
+    on the strength of there being no reserved-name list to cite. That was
+    wrong: a server cannot take a name the framework packs, because PackTool
+    (Go) and appendTools (Java) refuse the duplicate, so the request fails
+    instead. What actually stays open is the in-model built-ins, which are
+    appended straight to config.Tools and never pass through either check.
     """
-    for key in ("adk-go", "adk-java"):
-        fw = frameworks.get(key)
-        assert fw.guarded == frozenset(), key
-        assert fw.reserved, key
-        assert "no guard" in fw.source.lower() or "No guard" in fw.note, key
+    builtins = {"google_search", "google_maps_grounding", "url_context",
+                "code_execution"}
+
+    go = frameworks.get("adk-go")
+    assert "set_model_response" in go.guarded          # packed via PackTool
+    assert "transfer_to_agent" in go.guarded
+    assert builtins <= go.reserved - go.guarded        # the real gap
+    assert "PackTool" in go.source
+
+    java = frameworks.get("adk-java")
+    assert "set_model_response" in java.guarded        # appendTools throws
+    assert "transfer_to_agent" in java.guarded
+    assert {"google_search", "google_maps", "url_context",
+            "vertex_ai_search", "code_execution"} <= java.reserved - java.guarded
+    assert "appendTools" in java.source
 
 
 def test_status_is_reported_per_finding():
@@ -271,8 +295,13 @@ def test_status_is_reported_per_finding():
 
 
 def test_json_output_carries_the_status():
-    (finding,) = scan_names(["set_model_response"], targets=[frameworks.get("adk-go")])
-    assert finding.as_dict()["status"] == "unguarded"
+    """Go refuses the packed callable, and leaves the built-in name open."""
+    go = frameworks.get("adk-go")
+    (packed,) = scan_names(["set_model_response"], targets=[go])
+    assert packed.as_dict()["status"] == "guarded"
+
+    (builtin,) = scan_names(["google_search"], targets=[go])
+    assert builtin.as_dict()["status"] == "unguarded"
 
 
 def test_a_guarded_name_outside_reserved_is_rejected():

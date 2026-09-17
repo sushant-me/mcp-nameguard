@@ -9,8 +9,10 @@ server instead.
 Two different things are tracked, because they are not the same thing:
 
 ``guarded``
-    Names the framework refuses at MCP-server registration *today*. These are
-    transcribed from the framework's own source, and that file is cited.
+    Names the framework refuses for a server-supplied tool before the request
+    reaches the model - at MCP-server registration, or when the request is
+    built. These are transcribed from the framework's own source, and that file
+    is cited.
 
 ``reserved``
     Every name the framework itself puts on the wire, guarded or not. The
@@ -69,8 +71,8 @@ class Framework:
             return self.why[tool]
         if not self.is_guarded(tool):
             return (
-                f"{self.name} puts '{tool}' on the wire but does not refuse the "
-                f"name at MCP registration, so a server can take it."
+                f"{self.name} puts '{tool}' on the wire but does not refuse a "
+                f"server-supplied tool of that name, so a server can take it."
             )
         return self.note
 
@@ -120,11 +122,31 @@ _ADK_PYTHON = Framework(
     },
 )
 
-# google/adk-go - tool/mcptoolset/set.go
+# google/adk-go - tool/mcptoolset/set.go, tool/toolutils/toolutils.go
 #
-# Checked against upstream main: there is no reserved-name guard in this file,
-# or anywhere else in the repository, so every name below is unguarded. The
-# guard that would refuse them is proposed in google/adk-go#1606.
+# There is no reserved-name *list* in this repository, and McpToolset loads
+# server tools without checking their names. Reporting that as "nothing is
+# guarded" was nevertheless wrong, and an earlier revision of this file did.
+#
+# Tools that are packed into a request go through toolutils.PackTool, which
+# refuses a duplicate name outright:
+#
+#     if _, ok := req.Tools[name]; ok {
+#         return fmt.Errorf("duplicate tool: %q", name)
+#     }
+#
+# set_model_response is packed that way (internal/llminternal/
+# outputschema_processor.go -> PackTool), and so is every MCP tool
+# (tool/mcptoolset/tool.go -> PackTool). A server therefore cannot take a name
+# the framework packs; the request build fails instead. Fail-closed, but a
+# refusal, so those names are guarded here.
+#
+# The gap is the in-model built-ins. geminitool.setTool appends them straight
+# to req.Config.Tools (tool/geminitool/tool.go), so they never enter req.Tools,
+# PackTool never sees the name, and a server advertising one is accepted. Both
+# tools are then advertised under the same name - observed on
+# google/adk-go#1606, where the model was non-deterministic about which it
+# called.
 #
 # Every name here was verified as a string literal in the Go sources. An
 # earlier revision of this file copied the Java list, which was wrong in both
@@ -142,34 +164,60 @@ _ADK_GO = Framework(
         "url_context", "code_execution", "load_artifacts", "load_memory",
         "exit_loop", "list_skills", "load_skill", "load_skill_resource",
     }),
-    guarded=frozenset(),
-    source="tool/mcptoolset/set.go (no guard present upstream)",
+    # Packed through toolutils.PackTool, which errors on a duplicate name.
+    guarded=frozenset({
+        "set_model_response", "transfer_to_agent", "finish_task",
+        "task_completed", "load_artifacts", "load_memory",
+        "exit_loop", "list_skills", "load_skill", "load_skill_resource",
+    }),
+    source="tool/toolutils/toolutils.go (PackTool duplicate check); "
+           "tool/mcptoolset/set.go has no reserved list",
     note=(
-        "No reserved-name guard exists in this framework upstream: an "
-        "McpToolset loads server tools without checking their names."
+        "No reserved-name list exists here, but every packed tool goes through "
+        "toolutils.PackTool, which refuses a duplicate name - so those names "
+        "cannot be taken. In-model built-ins bypass PackTool and are not "
+        "refused."
     ),
+    why={
+        "google_search": "in-model built-in: geminitool.setTool appends it to "
+                         "Config.Tools, so PackTool never checks the name and "
+                         "the framework does not refuse it",
+        "google_maps_grounding": "in-model built-in: appended to Config.Tools, "
+                                 "never enters req.Tools; the framework does "
+                                 "not refuse it",
+        "url_context": "in-model built-in: appended to Config.Tools, never "
+                       "enters req.Tools; the framework does not refuse it",
+        "code_execution": "in-model built-in: appended to Config.Tools, never "
+                          "enters req.Tools; the framework does not refuse it",
+    },
 )
 
 # google/adk-java -
 # core/src/main/java/com/google/adk/tools/mcp/McpToolset.java
 #
-# Same finding as Go: no reserved-name guard upstream, so nothing is guarded.
-# Guard proposed in google/adk-java#1515.
+# Same shape as Go, and the same correction. There is no reserved-name list,
+# but LlmRequest.Builder.appendTools refuses a duplicate through a throwing
+# merger (models/LlmRequest.java), and every tool enters through
+# tools/BaseTool.java. A server cannot take a name the framework packs:
+# google/adk-java#1513 records the probe, where a server tool named
+# set_model_response produced "Duplicate tool name: set_model_response".
+#
+# The gap is again the in-model built-ins. GoogleSearchTool, GoogleMapsTool,
+# UrlContextTool, VertexAiSearchTool and BuiltInCodeExecutionTool override
+# processLlmRequest to append only to config.Tools and never call appendTools,
+# so the merger never sees the name. The same probe shows a callable tool
+# advertising google_search being accepted, with the dispatch map resolving
+# google_search to the server's tool (Functions.handleFunctionCalls resolves by
+# name).
 #
 # Java's tool set differs from Go's, and the two must not share a list. Every
 # name below is a `super("...")` literal in a non-test Java source, plus the two
 # the framework contributes outside a tool class: `set_model_response`
 # (added by the output-schema path) and `transfer_to_agent`.
 #
-# Two names in the previous revision were absent from Java entirely —
-# `finish_task` and `task_completed` — so they were reported as collisions
+# Two names in the previous revision were absent from Java entirely -
+# `finish_task` and `task_completed` - so they were reported as collisions
 # against a framework that does not define them.
-#
-# This port spells the memory tool `loadMemory`, not the `load_memory` the
-# others use. Java takes a tool's name from the method name when the method
-# carries no @Annotations.Schema, and `LoadMemoryTool#loadMemory` annotates only
-# its parameter, so `FunctionTool` falls back to `func.getName()`. Verified in
-# core/src/main/java/com/google/adk/tools/FunctionTool.java.
 _ADK_JAVA = Framework(
     key="adk-java",
     name="Google ADK (Java)",
@@ -179,13 +227,33 @@ _ADK_JAVA = Framework(
         "load_artifacts", "loadMemory",
         "exit_loop", "list_skills", "load_skill", "load_skill_resource",
     }),
-    guarded=frozenset(),
-    source="core/src/main/java/com/google/adk/tools/mcp/McpToolset.java "
-           "(no guard present upstream)",
+    # Enter through appendTools, whose merger throws on a duplicate name.
+    guarded=frozenset({
+        "set_model_response", "transfer_to_agent", "load_artifacts",
+        "loadMemory", "exit_loop", "list_skills", "load_skill",
+        "load_skill_resource",
+    }),
+    source="models/LlmRequest.java (appendTools throwing merger) + "
+           "tools/BaseTool.java; McpToolset.java has no reserved list",
     note=(
-        "No reserved-name guard exists in this framework upstream: McpToolset "
-        "loads server tools without checking their names."
+        "No reserved-name list exists here, but callable tools enter through "
+        "appendTools, whose merger throws on a duplicate name - so those names "
+        "cannot be taken. In-model built-ins bypass appendTools and are not "
+        "refused."
     ),
+    why={
+        "google_search": "in-model built-in: GoogleSearchTool appends only to "
+                         "config.Tools, so appendTools never checks the name "
+                         "and the framework does not refuse it",
+        "google_maps": "in-model built-in: appends only to config.Tools; the "
+                       "framework does not refuse it",
+        "url_context": "in-model built-in: appends only to config.Tools; the "
+                       "framework does not refuse it",
+        "vertex_ai_search": "in-model built-in: appends only to config.Tools; "
+                            "the framework does not refuse it",
+        "code_execution": "in-model built-in: appends only to config.Tools; "
+                          "the framework does not refuse it",
+    },
 )
 
 FRAMEWORKS: tuple[Framework, ...] = (_ADK_PYTHON, _ADK_GO, _ADK_JAVA)
