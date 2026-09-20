@@ -24,6 +24,13 @@ __all__ = ["McpHttpError", "list_tools_http"]
 # The spec requires the client to accept both framings.
 _ACCEPT = "application/json, text/event-stream"
 
+# A reply larger than this is refused rather than buffered. This client is pointed at servers it
+# does not trust BY DESIGN - inspecting a possibly-hostile MCP server is the tool's whole purpose -
+# so an unbounded read is a denial of service against the scanner: the process is killed by the
+# reply before it can report anything about the server. A scanner that dies on the server it was
+# asked to inspect has failed open, which is the one outcome it must not produce.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
 
 class McpHttpError(McpError):
     """Failure talking to an MCP server over HTTP."""
@@ -104,8 +111,27 @@ def list_tools_http(
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout_s) as response:
+                # Refuse up front when the server announces an oversized body, so those bytes are
+                # never pulled into memory at all.
+                declared = response.headers.get("Content-Length")
+                if declared is not None:
+                    try:
+                        if int(declared) > MAX_RESPONSE_BYTES:
+                            raise McpHttpError(
+                                f"the server announced a {declared}-byte reply, over the "
+                                f"{MAX_RESPONSE_BYTES}-byte limit"
+                            )
+                    except ValueError:
+                        pass  # a malformed Content-Length is not a reason to drop the cap
+                # The cap on the read is kept regardless, because the header is advisory: it can be
+                # absent, wrong, or a lie. Reading one byte past the limit is how overflow is seen.
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+                if len(raw) > MAX_RESPONSE_BYTES:
+                    raise McpHttpError(
+                        f"the server replied with more than {MAX_RESPONSE_BYTES} bytes"
+                    )
                 return (
-                    response.read().decode("utf-8", errors="replace"),
+                    raw.decode("utf-8", errors="replace"),
                     response.headers.get("Mcp-Session-Id") or session,
                     (response.headers.get("Content-Type") or "").lower(),
                 )

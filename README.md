@@ -226,6 +226,10 @@ the moment you add a server, which is the moment nothing else checks.
 * It checks **name collisions only**. It does not read tool descriptions, so it
   will not catch prompt injection or tool poisoning hidden in prose — those are
   different problems with different tools.
+* The server is treated as **untrusted input**. Replies are capped at 8 MiB — HTTP bodies and
+  stdio lines alike — and refused above that rather than buffered. A scanner that dies on the
+  server it was asked to inspect fails open: it reports nothing about a server that may be
+  hostile, which is the one outcome this tool must not produce.
 * A collision is not automatically exploitable. It means the framework and the
   server disagree about who owns a name, which is worth resolving before
   deployment; whether it is exploitable depends on the framework's dispatch
@@ -240,11 +244,12 @@ the moment you add a server, which is the moment nothing else checks.
 python -m pytest tests/
 ```
 
-63 tests covering the comparison, the guarded/unguarded split and its
+82 tests covering the comparison, the guarded/unguarded split and its
 import-time contradiction check, every payload shape, both transports driven by
-stub servers that banner, error, hang, return HTTP 500, send SSE, and answer
-malformed, the failure mode where a bad response must not look like a clean
-scan, the CLI exit codes, and the per-name explanation.
+stub servers that banner, error, hang, return HTTP 500, send SSE, answer
+malformed, and send a reply too large to read, the failure mode where a bad
+response must not look like a clean scan, the CLI exit codes, and the per-name
+explanation.
 
 ## Licence
 

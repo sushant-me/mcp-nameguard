@@ -91,3 +91,13 @@ def test_a_failure_quotes_what_the_server_said_on_stderr():
     message = str(excinfo.value)
     assert "config file not found" in message
     assert "stderr" in message
+
+
+def test_an_oversized_message_is_refused_not_buffered(monkeypatch):
+    """Same reasoning as the HTTP cap: the subprocess is not trusted, so a line that would grow
+    without bound is refused rather than read into memory."""
+    from nameguard import mcp_stdio
+    monkeypatch.setattr(mcp_stdio, "MAX_MESSAGE_BYTES", 64 * 1024)
+    with pytest.raises(McpStdioError) as excinfo:
+        list_tools_stdio(_cmd("huge"), timeout_s=15)
+    assert "larger than" in str(excinfo.value)

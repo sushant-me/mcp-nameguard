@@ -7,4 +7,4 @@ misreported the release. `tests/test_version.py` keeps this file and
 `pyproject.toml` in step.
 """
 
-__version__ = "0.4.7"
+__version__ = "0.4.8"

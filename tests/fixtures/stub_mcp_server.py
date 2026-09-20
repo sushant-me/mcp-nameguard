@@ -6,6 +6,7 @@ Modes (first argument):
   error    answer tools/list with a JSON-RPC error
   exit     say nothing and exit
   quiet    answer initialize, then never answer tools/list
+  huge     answer tools/list with one line far over the client's size cap
   broken   answer with a reply whose result has no tool array
   chatty   answer normally while logging to stderr, past any pipe buffer size
   noisy-fail  refuse tools/list while logging the reason to stderr
@@ -81,6 +82,12 @@ def main() -> int:
                     "jsonrpc": "2.0", "id": msg_id,
                     "error": {"code": -32603, "message": "internal error"},
                 }) + "\n")
+                sys.stdout.flush()
+                continue
+            if mode == "huge":
+                # One line far larger than the cap. The client must refuse it rather than grow
+                # until the process dies, because that is the server it was asked to inspect.
+                sys.stdout.write("x" * (256 * 1024) + "\n")
                 sys.stdout.flush()
                 continue
             if mode == "broken":

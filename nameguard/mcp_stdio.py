@@ -37,6 +37,17 @@ class McpStdioError(McpError):
     """Failure talking to an MCP server over stdio."""
 
 
+# A subprocess this tool does not trust can emit one arbitrarily long line. Same reasoning as the
+# HTTP cap: refused, not buffered, because dying on the server under inspection is failing open.
+MAX_MESSAGE_BYTES = 8 * 1024 * 1024
+
+# Longest stderr line kept for the diagnostic tail. It is only ever shown to a human.
+MAX_TAIL_LINE_CHARS = 2000
+
+# Sentinel placed on the queue when a line exceeded the cap, so the reader never has to grow.
+_OVERSIZE = object()
+
+
 class _Reader(threading.Thread):
     """Drains stdout on its own thread so a silent server cannot block us."""
 
@@ -45,11 +56,21 @@ class _Reader(threading.Thread):
     def __init__(self, stream) -> None:
         super().__init__()
         self._stream = stream
-        self.lines: queue.Queue[str | None] = queue.Queue()
+        self.lines: queue.Queue[Any] = queue.Queue()
 
     def run(self) -> None:
         try:
-            for line in self._stream:
+            # readline(limit) rather than `for line in stream`: iterating a pipe line-wise buffers
+            # the WHOLE line before yielding it, so a server that emits one enormous line has
+            # already spent the memory by the time any check could run. The bound has to be on the
+            # read, not on what comes back from it.
+            while True:
+                line = self._stream.readline(MAX_MESSAGE_BYTES + 1)
+                if not line:
+                    break
+                if len(line) > MAX_MESSAGE_BYTES:
+                    self.lines.put(_OVERSIZE)
+                    return
                 self.lines.put(line)
         except (OSError, ValueError):
             pass
@@ -64,6 +85,10 @@ class _Reader(threading.Thread):
             except queue.Empty:
                 raise McpStdioError(
                     f"the server did not reply within {deadline_s:.0f}s"
+                ) from None
+            if line is _OVERSIZE:
+                raise McpStdioError(
+                    f"the server sent a message larger than {MAX_MESSAGE_BYTES} bytes"
                 ) from None
             if line is None:
                 return None
@@ -109,10 +134,16 @@ class _StderrDrain(threading.Thread):
 
     def run(self) -> None:
         try:
-            for line in self._stream:
+            # Chunked read for the same reason as stdout, and each retained line is cut to a length
+            # a human would read: this tail is diagnostic text, never protocol.
+            while True:
+                line = self._stream.readline(MAX_TAIL_LINE_CHARS * 4)
+                if not line:
+                    break
                 line = line.rstrip()
-                if line:
-                    self._tail.append(line)
+                if not line:
+                    continue
+                self._tail.append(line[:MAX_TAIL_LINE_CHARS])
         except (OSError, ValueError):
             # The pipe closed under us, which is what shutdown looks like.
             pass
