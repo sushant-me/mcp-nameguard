@@ -256,3 +256,12 @@ explanation.
 MIT — see [LICENSE](LICENSE).
 
 Authored by [Sushant Poudel](https://github.com/sushant-me).
+
+## Security
+
+This project has a published security advisory:
+**[GHSA-wcqw-86xv-w95q](https://github.com/sushant-me/mcp-nameguard/security/advisories/GHSA-wcqw-86xv-w95q)**
+(medium) — An unbounded server reply let a hostile MCP server exhaust memory and kill the scanner inspecting it - which fails open against the exact adversary the tool was pointed at.
+
+Fixed in v0.4.8. The advisory carries the reproduction and the regression test; the fix
+is checked by the test suite on every push.
