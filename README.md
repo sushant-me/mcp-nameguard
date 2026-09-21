@@ -253,7 +253,7 @@ explanation.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/sushant-me/mcp-nameguard/blob/main/LICENSE).
 
 Authored by [Sushant Poudel](https://github.com/sushant-me).
 
