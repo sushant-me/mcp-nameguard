@@ -9,12 +9,22 @@ description = "Check an MCP server's tool names against the names agent framewor
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
+authors = [{ name = "Sushant Poudel", email = "sushant.poudel2028@gmail.com" }]
 keywords = ["mcp", "ai-agents", "tool-poisoning", "security", "model-context-protocol"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Topic :: Security",
 ]
+
+[project.urls]
+Homepage = "https://github.com/sushant-me/mcp-nameguard"
+Repository = "https://github.com/sushant-me/mcp-nameguard"
+Issues = "https://github.com/sushant-me/mcp-nameguard/issues"
+"Security advisories" = "https://github.com/sushant-me/mcp-nameguard/security/advisories"
+"Advisory GHSA-wcqw-86xv-w95q" = "https://github.com/sushant-me/mcp-nameguard/security/advisories/GHSA-wcqw-86xv-w95q"
 
 [project.scripts]
 mcp-nameguard = "nameguard.cli:main"
