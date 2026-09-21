@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software in work you publish, please cite it as below."
+title: "mcp-nameguard"
+type: software
+authors:
+  - family-names: Poudel
+    given-names: Sushant
+    email: sushant.poudel2028@gmail.com
+    affiliation: "Nepal Engineering College, Bhaktapur, Nepal"
+    # Register an ORCID iD and add it here — it is the identifier that
+    # disambiguates this author from other researchers of the same name:
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+abstract: >-
+  Check an MCP server's tool names against the names agent frameworks reserve for their own tools.
+keywords:
+  - mcp
+  - ai-agents
+  - tool-poisoning
+  - security
+  - model-context-protocol
+license: MIT
+repository-code: "https://github.com/sushant-me/mcp-nameguard"
