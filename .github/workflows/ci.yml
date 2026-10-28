@@ -36,3 +36,45 @@ jobs:
           fi
           printf '{"tools":[{"name":"get_weather"}]}' > /tmp/clean.json
           mcp-nameguard check /tmp/clean.json
+
+  # The action is how this will mostly be run, so it is tested the way it is used:
+  # `uses: ./` on a clean payload (pass), a collision (fail with the counts still
+  # exported), and two sources at once (must be refused, not silently resolved).
+  action-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: printf '{"tools":[{"name":"get_weather"}]}' > "$RUNNER_TEMP/tools.json"
+      - uses: ./
+        with:
+          source: ${{ runner.temp }}/tools.json
+
+  action-collision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: printf '{"tools":[{"name":"set_model_response"}]}' > "$RUNNER_TEMP/tools.json"
+      - id: ng
+        uses: ./
+        continue-on-error: true
+        with:
+          source: ${{ runner.temp }}/tools.json
+      - name: The action failed the job for a collision
+        run: test "${{ steps.ng.outcome }}" = "failure"
+      - name: The action still exported the counts
+        run: |
+          test "${{ steps.ng.outputs.findings }}" -gt 0
+          test "${{ steps.ng.outputs.exit-code }}" = "1"
+
+  action-rejects-two-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: ng
+        uses: ./
+        continue-on-error: true
+        with:
+          source: ${{ runner.temp }}/tools.json
+          http: https://example.invalid
+      - name: Two sources are refused instead of one of them silently winning
+        run: test "${{ steps.ng.outcome }}" = "failure"

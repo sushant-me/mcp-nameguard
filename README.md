@@ -61,7 +61,7 @@ rather than after.
 Install the released version:
 
 ```bash
-pip install "git+https://github.com/sushant-me/mcp-nameguard.git@v0.4.8"
+pip install "git+https://github.com/sushant-me/mcp-nameguard.git@v0.4.9"
 ```
 
 Or work from a clone (`pip install -e .`) - the commands below use files from this repository.
@@ -121,6 +121,26 @@ bare word, which is a legal name and also what a failed `--json` command
 sometimes prints. Complete JSON values are the exception and are classified -
 `null`, `true`, `false` and a bare number are rejected rather than read as a tool
 named `null`. For a pipeline, prefer `--json`, where the payload is unambiguous.
+
+### Use it in CI
+
+The repository is a composite action, so the check is one step in a workflow —
+either against a saved payload or against the server itself:
+
+```yaml
+- uses: sushant-me/mcp-nameguard@v1
+  with:
+    # one of:
+    source: tools.json                                   # a saved tools/list payload
+    # stdio: npx -y @modelcontextprotocol/server-filesystem /tmp
+    # http: https://mcp.example.com/mcp
+    # header: Authorization: Bearer ${{ secrets.MCP_TOKEN }}
+    framework: adk-python,adk-go                         # optional; default is all
+```
+
+It exports `findings`, `unguarded` and `exit-code`, and writes a collision table to
+the job summary. The inputs are validated: setting more than one of `source`,
+`stdio` and `http` fails the step rather than letting one of them silently win.
 
 ### Exit codes
 

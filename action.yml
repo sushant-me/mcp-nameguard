@@ -1,0 +1,188 @@
+name: mcp-nameguard
+description: >-
+  Check the tool names an MCP server advertises against the names agent frameworks
+  put on the wire themselves. A collision is either GUARDED (the framework refuses
+  the name, so a server advertising it has broken a documented rule) or UNGUARDED
+  (the framework does not refuse it, so the server can simply take it). Fails the
+  job on any collision.
+author: Sushant Poudel
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  source:
+    description: >-
+      Path to a saved `tools/list` JSON payload, a file of tool names (one per line),
+      or `-` to read stdin. Use this when the server already ran; otherwise use
+      `stdio` or `http`.
+    required: false
+    default: ''
+  stdio:
+    description: >-
+      Command that starts an MCP server over stdio, e.g.
+      `npx -y @modelcontextprotocol/server-filesystem /tmp`. The action asks it for
+      its tools and then lets it exit.
+    required: false
+    default: ''
+  http:
+    description: URL of a remote MCP server speaking Streamable HTTP.
+    required: false
+    default: ''
+  header:
+    description: >-
+      Extra header for `http`, one per line, e.g. `Authorization: Bearer $TOKEN`.
+      Write them from a secret, not from a literal in the workflow.
+    required: false
+    default: ''
+  framework:
+    description: >-
+      Limit the check to these framework keys, comma-separated (default: every
+      supported framework). Run `npx`-free locally with `mcp-nameguard frameworks`
+      to list them.
+    required: false
+    default: ''
+  timeout:
+    description: How long to wait for a server started with `stdio` or `http`.
+    required: false
+    default: '20'
+  summary:
+    description: Write a collision summary to the job summary.
+    required: false
+    default: 'true'
+
+outputs:
+  findings:
+    description: Number of collisions reported, guarded or unguarded.
+    value: ${{ steps.check.outputs.findings }}
+  unguarded:
+    description: Number of reported collisions the framework does not refuse.
+    value: ${{ steps.check.outputs.unguarded }}
+  exit-code:
+    description: '0 no collisions; 1 collisions found; 2 the server or input could not be read.'
+    value: ${{ steps.check.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install mcp-nameguard
+      shell: bash
+      # A venv rather than `pip install` into the runner's Python: runner images
+      # change, and a PEP-668 externally-managed environment would turn that into a
+      # setup failure instead of a check.
+      run: |
+        python3 -m venv "$RUNNER_TEMP/mcp-nameguard-venv"
+        "$RUNNER_TEMP/mcp-nameguard-venv/bin/pip" install --quiet --disable-pip-version-check "${{ github.action_path }}"
+        echo "$RUNNER_TEMP/mcp-nameguard-venv/bin" >> "$GITHUB_PATH"
+
+    - name: Check
+      id: check
+      shell: bash
+      env:
+        NG_SOURCE: ${{ inputs.source }}
+        NG_STDIO: ${{ inputs.stdio }}
+        NG_HTTP: ${{ inputs.http }}
+        NG_HEADER: ${{ inputs.header }}
+        NG_FRAMEWORK: ${{ inputs.framework }}
+        NG_TIMEOUT: ${{ inputs.timeout }}
+        NG_SUMMARY: ${{ inputs.summary }}
+      run: |
+        set -euo pipefail
+
+        # Exactly one source, because two would look like a check while only one of
+        # them ran, and the missing one would be the silent one.
+        given=0
+        [ -n "$NG_SOURCE" ] && given=$((given + 1))
+        [ -n "$NG_STDIO" ] && given=$((given + 1))
+        [ -n "$NG_HTTP" ] && given=$((given + 1))
+        if [ "$given" -ne 1 ]; then
+          echo "::error::set exactly one of 'source', 'stdio' or 'http' (got $given)."
+          exit 2
+        fi
+
+        args=(check)
+        if [ -n "$NG_SOURCE" ]; then
+          args+=("$NG_SOURCE")
+        elif [ -n "$NG_STDIO" ]; then
+          args+=(--stdio "$NG_STDIO")
+        else
+          args+=(--http "$NG_HTTP")
+          while IFS= read -r line; do
+            [ -n "$line" ] && args+=(--header "$line")
+          done <<< "$NG_HEADER"
+        fi
+        if [ -n "$NG_FRAMEWORK" ]; then
+          IFS=',' read -ra frameworks <<< "$NG_FRAMEWORK"
+          for f in "${frameworks[@]}"; do
+            [ -n "$f" ] && args+=(--framework "$(echo "$f" | xargs)")
+          done
+        fi
+        [ -n "$NG_TIMEOUT" ] && args+=(--timeout "$NG_TIMEOUT")
+
+        set +e
+        mcp-nameguard "${args[@]}" --json > "$RUNNER_TEMP/nameguard.json"
+        code=$?
+        set -e
+
+        # A human report as well, so a red job shows what tripped it. Stdin can only
+        # be consumed once, and a live server would be started twice; for those the
+        # machine output is printed instead.
+        if [ -n "$NG_SOURCE" ] && [ "$NG_SOURCE" != "-" ]; then
+          set +e
+          mcp-nameguard "${args[@]}" > "$RUNNER_TEMP/nameguard.txt" 2>&1
+          set -e
+        else
+          cp "$RUNNER_TEMP/nameguard.json" "$RUNNER_TEMP/nameguard.txt"
+        fi
+        cat "$RUNNER_TEMP/nameguard.txt"
+
+        read -r count unguarded < <(python3 - "$RUNNER_TEMP/nameguard.json" <<'PY'
+        import json, sys
+
+        raw = open(sys.argv[1]).read().strip()
+        try:
+            data = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            data = []
+        findings = data if isinstance(data, list) else []
+        print(len(findings), sum(1 for f in findings if f.get("status") == "unguarded"))
+        PY
+        )
+
+        {
+          echo "findings=$count"
+          echo "unguarded=$unguarded"
+          echo "exit-code=$code"
+        } >> "$GITHUB_OUTPUT"
+
+        if [ "$NG_SUMMARY" = "true" ]; then
+          python3 - "$RUNNER_TEMP/nameguard.json" "$code" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+        import json, sys
+
+        raw = open(sys.argv[1]).read().strip()
+        try:
+            data = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            data = []
+        findings = data if isinstance(data, list) else []
+        code = sys.argv[2]
+        unguarded = sum(1 for f in findings if f.get("status") == "unguarded")
+
+        print("## mcp-nameguard")
+        print()
+        print(f"{len(findings)} collision(s), **{unguarded} unguarded** · exit `{code}`")
+        print()
+        if findings:
+            print("| tool | framework | status |")
+            print("|---|---|---|")
+            for f in findings:
+                print(f"| `{f.get('tool')}` | {f.get('framework')} | {f.get('status')} |")
+            print()
+            print("`unguarded` means the framework puts the name on the wire and does not "
+                  "refuse it — a server can take it. `guarded` means the framework refuses "
+                  "it, so the server's tool is dropped.")
+        PY
+        fi
+
+        exit "$code"
