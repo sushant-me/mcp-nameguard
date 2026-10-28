@@ -58,6 +58,14 @@ rather than after.
 
 ## Install
 
+Install the released version:
+
+```bash
+pip install "git+https://github.com/sushant-me/mcp-nameguard.git@v0.4.8"
+```
+
+Or work from a clone (`pip install -e .`) - the commands below use files from this repository.
+
 ```bash
 pip install -e .
 ```
